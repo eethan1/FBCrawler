@@ -98,7 +98,7 @@ class FBPrivateGroupCrawler:
         latest = 0
         e = 0
         self.infocb('Success locate post, retrieving...')
-        self.infocb(len(names),len(timestamps),len(contents))
+        self.infocb(f'{len(names)},{len(timestamps)},{len(contents)}')
         for n,t,c in zip(names,timestamps, contents):
             name = n.get_attribute('title')
             post_time = int(t.get_attribute('data-utime'))
@@ -116,7 +116,7 @@ class FBPrivateGroupCrawler:
             cb(message)
         self.infocb(f'latested: {self.latest}')
     def refresh(self):
-        print(f'Refresh: {self.browser.current_url}')
+        self.infocb(f'Refresh: {self.browser.current_url}')
         self.browser.refresh()
     def __del__(self):
         with open('timestamp.txt','w') as f:
