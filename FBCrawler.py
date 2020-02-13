@@ -6,9 +6,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from datetime import datetime
 import requests
+import logging
+from pprint import pprint,pformat
 
 class FBPrivateGroupCrawler:
-    def __init__(self, email,password,group_url,sortBy='CHRONOLOGICAL',headless=True):
+    def __init__(self, email,password,group_url,sortBy='CHRONOLOGICAL',headless=True,crashcb=logging.error,infocb=logging.info,debugcb=logging.debug,loglevel=logging.INFO):
+        logging.basicConfig(level=loglevel)
         self.firefoxOptions = webdriver.FirefoxOptions()
         if headless:
             self.firefoxOptions.set_headless()
@@ -21,6 +24,12 @@ class FBPrivateGroupCrawler:
         self.spanNum = 0
         self.browser.get(self.targetURL)
         self.latest = 0
+        self.crashcb = crashcb
+        self.infocb = infocb
+        self.debugcb = debugcb
+        logging.info(f'Init FB private group crawler...')
+        logging.info(pformat({"Usernam":self.username,"targetURL":self.targetURL,"Headless":bool(headless)}))
+
     def login(self):
         self.browser.get('https://www.facebook.com/login')
         try:
@@ -28,7 +37,10 @@ class FBPrivateGroupCrawler:
                 EC.presence_of_element_located((By.XPATH, '//*[@name="login"]'))
             )
         except:
-            print('Failed to Get Login element')
+            self.crashcb('Failed to Get Login element',exc_info=True)
+            self.debugcb('Write latest page to ./latestpage.html')
+            with open('./latestpage.html', 'w') as f:
+                f.write(self.browser.page_source)
             exit(-1)
         username = self.browser.find_element_by_id('email')
         password = self.browser.find_element_by_id('pass')
@@ -38,6 +50,8 @@ class FBPrivateGroupCrawler:
         if False:# TODO: check login success
             pass
         self.browser.get(self.targetURL)
+        self.infocb(f'Login success')
+
     def spanMore(self):
         print(self.targetURL, self.browser.current_url)
         assert _find_sub_path(self.browser.current_url) == _find_sub_path(self.targetURL)
@@ -46,7 +60,10 @@ class FBPrivateGroupCrawler:
                 EC.presence_of_element_located((By.XPATH,'//div[contains(@class,"userContent")]/div/span/span/a'))
             )
         except:
-            print('failed')
+            self.crashcb('Failed to locate spanMore element',exc_info=True)
+            self.debugcb('Write latest page to ./latestpage.html')
+            with open('./latestpage.html', 'w') as f:
+                f.write(self.browser.page_source)
             exit(-1)
         get_more = self.browser.find_elements_by_xpath('//div[contains(@class,"userContent")]/div/span/span/a')
         num = len(get_more) - 1
@@ -55,9 +72,12 @@ class FBPrivateGroupCrawler:
             self.spanNum += 1
             try:
                 get_more[i].click()
+                self.debugcb(f'span element {i}')
             except:
+                self.debugcb(f'ignore failed span {i}')
                 continue
-        
+        self.infocb(f'Span success')
+
     def processPost(self,cb=print):
         assert _find_sub_path(self.browser.current_url) == _find_sub_path(self.targetURL)
         try:
@@ -65,8 +85,10 @@ class FBPrivateGroupCrawler:
                 EC.presence_of_element_located((By.XPATH,'//h5[contains(@class,"_7tae")]//a'))
             )
         except:
-            print('Name not rendered')
-            self.browser.quit()
+            self.crashcb('Failed to locate post element',exc_info=True)
+            self.debugcb('Write latest page to ./latestpage.html')
+            with open('./latestpage.html', 'w') as f:
+                f.write(self.browser.page_source)
             exit(-1)
         names = self.browser.find_elements_by_xpath('//h5[contains(@class,"_7tae")]//a')[self.spanNum-1::-1]
         timestamps = self.browser.find_elements_by_xpath('//abbr[contains(@class,"_5ptz")]')[self.spanNum-1::-1]
@@ -75,7 +97,8 @@ class FBPrivateGroupCrawler:
         message=''
         latest = 0
         e = 0
-        print(len(names),len(timestamps),len(contents))
+        self.infocb('Success locate post, retrieving...')
+        self.infocb(len(names),len(timestamps),len(contents))
         for n,t,c in zip(names,timestamps, contents):
             name = n.get_attribute('title')
             post_time = int(t.get_attribute('data-utime'))
@@ -83,16 +106,22 @@ class FBPrivateGroupCrawler:
                 self.latest = post_time
                 e += 1
             else:
-                print(datetime.fromtimestamp(post_time),datetime.fromtimestamp(latest))
+                self.debugcb('Oldest one found')
+                self.debugcb(name)
+                self.debugcb((datetime.fromtimestamp(post_time),datetime.fromtimestamp(latest)))
                 continue
             date = datetime.fromtimestamp(post_time)
             content = c.text
             message = f'{name}\n{date}\n{content}\n{self.targetURL}'
             cb(message)
+        self.infocb(f'latested: {self.latest}')
     def refresh(self):
         print(f'Refresh: {self.browser.current_url}')
         self.browser.refresh()
     def __del__(self):
+        with open('timestamp.txt','w') as f:
+            f.write(str(self.latest))
+        self.infocb(f'latested: {self.latest}')
         self.browser.quit()
         
 def _find_sub_path(url):
