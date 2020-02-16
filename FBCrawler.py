@@ -4,31 +4,46 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait 
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from datetime import datetime
 import requests
 import logging
 from pprint import pprint,pformat
 import atexit
+import os.path
+
 class FBPrivateGroupCrawler:
     def __init__(self, email,password,group_url,sortBy='CHRONOLOGICAL',headless=True,crashcb=logging.error,infocb=logging.info,debugcb=logging.debug,loglevel=logging.INFO):
         logging.basicConfig(level=loglevel)
-        self.firefoxOptions = webdriver.FirefoxOptions()
-        if headless:
-            self.firefoxOptions.set_headless()
-        self.browser = webdriver.Firefox(firefox_options=self.firefoxOptions)
+        self.crashcb = crashcb
+        self.infocb = infocb
+        self.debugcb = debugcb
+
         self.username = email
         self.password = password
         self.groupURL = group_url
         self.sortBy = sortBy
-        self.targetURL = f'{group_url}?sorting_setting={self.sortBy}'
         self.spanNum = 0
-        self.browser.get(self.targetURL)
+
         self.latest = 0
-        self.crashcb = crashcb
-        self.infocb = infocb
-        self.debugcb = debugcb
-        logging.info(f'Init FB private group crawler...')
-        logging.info(pformat({"Usernam":self.username,"targetURL":self.targetURL,"Headless":bool(headless)}))
+        if os.path.isfile('timestamp.txt'):
+            with open('timestamp.txt','r') as f:
+                try:
+                    self.latest = int(f.read())
+                    self.infocb(f'Loading timestamp from file...{self.latest}')
+                except:
+                    self.latest = 0
+                    logging.warn('Failed to load timestamp.txt, set it 0')
+
+        self.targetURL = f'{group_url}?sorting_setting={self.sortBy}'
+        self.firefoxOptions = webdriver.FirefoxOptions()
+        if headless:
+            self.firefoxOptions.set_headless()
+        self.browser = webdriver.Firefox(firefox_options=self.firefoxOptions)
+
+        self.browser.get(self.targetURL)
+        self.infocb(f'Init FB private group crawler...')
+        self.infocb(pformat({"Usernam":self.username,"targetURL":self.targetURL,"Headless":bool(headless)}))
         atexit.register(self._before_exit)
 
     def login(self):
@@ -118,14 +133,24 @@ class FBPrivateGroupCrawler:
         self.infocb(f'latested: {self.latest}')
     def refresh(self):
         self.infocb(f'Refresh: {self.browser.current_url}')
-        self.browser.refresh()
+        failed = True
+        for _ in range(3):
+            try:
+                self.browser.refresh()
+                failed = False
+                break
+            except TimeoutException as e:
+                self.infocb(e.msg)
+        if failed:
+            raise TimeoutException('Try refresh 3 times failed')
+                
     
     def _before_exit(self):
-        self.infocb('_before_exit')
+        self.infocb(f'Saving latest...{self.latest}')
         with open('timestamp.txt','w') as f:
             f.write(str(self.latest))
     def __del__(self):
-        self.infocb(f'__del__: latested: {self.latest}')
+        self.debugcb(f'__del__: latest: {self.latest}')
         self.browser.quit()
 
 def _find_sub_path(url):
