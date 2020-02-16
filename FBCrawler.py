@@ -8,7 +8,7 @@ from datetime import datetime
 import requests
 import logging
 from pprint import pprint,pformat
-
+import atexit
 class FBPrivateGroupCrawler:
     def __init__(self, email,password,group_url,sortBy='CHRONOLOGICAL',headless=True,crashcb=logging.error,infocb=logging.info,debugcb=logging.debug,loglevel=logging.INFO):
         logging.basicConfig(level=loglevel)
@@ -29,6 +29,7 @@ class FBPrivateGroupCrawler:
         self.debugcb = debugcb
         logging.info(f'Init FB private group crawler...')
         logging.info(pformat({"Usernam":self.username,"targetURL":self.targetURL,"Headless":bool(headless)}))
+        atexit.register(self._before_exit)
 
     def login(self):
         self.browser.get('https://www.facebook.com/login')
@@ -118,12 +119,15 @@ class FBPrivateGroupCrawler:
     def refresh(self):
         self.infocb(f'Refresh: {self.browser.current_url}')
         self.browser.refresh()
-    def __del__(self):
+    
+    def _before_exit(self):
+        self.infocb('_before_exit')
         with open('timestamp.txt','w') as f:
             f.write(str(self.latest))
-        self.infocb(f'latested: {self.latest}')
+    def __del__(self):
+        self.infocb(f'__del__: latested: {self.latest}')
         self.browser.quit()
-        
+
 def _find_sub_path(url):
         p = url.find('/',0)
         if p == -1:
