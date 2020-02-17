@@ -143,14 +143,32 @@ class FBPrivateGroupCrawler:
                 self.infocb(e.msg)
         if failed:
             raise TimeoutException('Try refresh 3 times failed')
-                
+
+    
+    def retarget(self):        
+        self.infocb(f'Retarget: {self.targetURL}')
+        failed = True
+        for _ in range(3):
+            try:
+                self.browser.get(self.targetURL)
+                failed = False
+                break
+            except Exception as e:
+                self.infocb(f'{e}')
+        if failed:
+            raise TimeoutException(f'Try retarget {self.targetURL} 3 times failed')
     
     def _before_exit(self):
         self.infocb(f'Saving latest...{self.latest}')
-        with open('timestamp.txt','w') as f:
+        with open('timestamp.txt', 'w') as f:
             f.write(str(self.latest))
+        self.infocb(f'Saving last page...{self.browser.current_url}')
+        with open('lastpage.html', 'w') as f:
+            f.write(self.browser.page_source)
+
     def __del__(self):
         self.debugcb(f'__del__: latest: {self.latest}')
+        self.debugcb(f'__del__: current_url: {self.browser.current_url}')
         self.browser.quit()
 
 def _find_sub_path(url):
